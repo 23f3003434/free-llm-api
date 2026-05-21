@@ -17,7 +17,11 @@ class ChatGPTPage:
         await text_field.click()
         await self.page.keyboard.press("Control+A")
         await self.page.keyboard.press("Backspace")
-        await self.page.keyboard.type(prompt_text, delay=15)
+        
+        # FIX: Fill the element text directly instead of simulating typing individual layout keys
+        # This safely injects multiline formatting strings directly into the element
+        await text_field.fill(prompt_text)
+
 
     async def get_assistant_turn_count(self) -> int:
         return await self.page.locator(self._assistant_sections).count()

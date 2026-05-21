@@ -55,8 +55,10 @@ async def process_chat_endpoint(payload: ChatRequest):
         raise HTTPException(status_code=503, detail="Browser environment is not initialized yet.")
     
     try:
+        print(f"Called /chat endpoint with message: {payload.message}")
         # Calls the core logic service completely decoupled from the web app
         ai_response_text = await execute_chat_transaction(shared_page_object, payload.message)
+        print(f"Returning response for message: {payload.message}")
         return ChatResponse(response=ai_response_text)
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Transaction failed: {str(error)}")
