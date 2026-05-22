@@ -1,47 +1,43 @@
-import time
-from playwright.sync_api import Page
+import asyncio
+from playwright.async_api import Page
 
 class ChatGPTPage:
     def __init__(self, page: Page):
         self.page = page
-        self._input_xpath = "xpath=/html/body/div/div/div/div/div/div/main/div/div/div/div/div/div/div/div/div/div/form/div/div/div/div/div/p"
+        # Using resilient relative CSS selectors instead of fragile absolute xpaths
+        self._input_locator = "div[id='prompt-textarea']"
         self._send_button_testid = "send-button"
-        self._assistant_sections = 'section[data-turn="assistant"]'
         self._inner_markdown = 'div[data-message-author-role="assistant"] div.markdown'
 
-    def prepare_and_type_prompt(self, prompt_text: str):
-        text_field = self.page.locator(self._input_xpath)
-        text_field.wait_for(state="visible", timeout=200)
-        text_field.click()
-        self.page.keyboard.press("Control+A")
-        self.page.keyboard.press("Backspace")
-        text_field.fill(prompt_text)
+    async def prepare_and_type_prompt(self, prompt_text: str):
+        text_field = self.page.locator(self._input_locator).first
+        await text_field.wait_for(state="visible", timeout=1000)
+        await text_field.click()
+        # Ensure field is clear before typing
+        await self.page.keyboard.press("Control+A")
+        await self.page.keyboard.press("Backspace")
+        await text_field.fill(prompt_text)
 
-    def get_assistant_turn_count(self) -> int:
-        return self.page.locator(self._assistant_sections).count()
+    async def get_assistant_turn_count(self) -> int:
+        return await self.page.locator(self._inner_markdown).count()
 
-    def click_send(self):
+    async def click_send(self):
         send_button = self.page.get_by_test_id(self._send_button_testid)
-        send_button.wait_for(state="visible", timeout=100)
-        send_button.click()
+        await send_button.wait_for(state="visible", timeout=1000)
+        await send_button.click()
 
-    def wait_and_extract_response(self, target_index: int) -> str:
-        target_turn = self.page.locator(self._assistant_sections).nth(target_index)
-        container = target_turn.locator(self._inner_markdown)
-        container.wait_for(state="visible", timeout=15000)
+    async def wait_and_extract_response(self, target_index: int) -> str:
+        """Waits for the new streaming message to finish and extracts text."""
+        response_locator = self.page.locator(self._inner_markdown).nth(target_index)
+        await response_locator.wait_for(state="visible", timeout=60000)
         
-        previous_length = 0
-        stable_cycles = 0
-        
-        while stable_cycles < 4:
-            time.sleep(0.5)
-            current_text = container.inner_text()
-            current_length = len(current_text.strip())
+        # Monitor streaming stability (loops until text length stops growing)
+        previous_text = ""
+        while True:
+            await asyncio.sleep(1.0)
+            current_text = await response_locator.inner_text()
+            if current_text == previous_text and len(current_text) > 0:
+                break
+            previous_text = current_text
             
-            if current_length > 0 and current_length == previous_length:
-                stable_cycles += 1
-            else:
-                stable_cycles = 0
-            previous_length = current_length
-            
-        return container.inner_text().strip()
+        return current_text

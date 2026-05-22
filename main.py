@@ -1,41 +1,26 @@
-import os
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-# Notice: No Playwright imports here anymore
-from app_modules.chat_service import (
-    initialize_browser_service, 
-    close_browser_service, 
-    execute_chat_transaction
-)
+import asyncio
+from langchain_core.messages import HumanMessage
+from models import ScrapeChatModel
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Delegate initialization entirely to the chat service
-    await initialize_browser_service()
-    yield
-    # Delegate cleanup entirely to the chat service
-    await close_browser_service()
-
-app = FastAPI(lifespan=lifespan)
-
-class ChatRequest(BaseModel):
-    message: str
-
-class ChatResponse(BaseModel):
-    response: str
-
-@app.post("/chat", response_model=ChatResponse)
-async def process_chat_endpoint(payload: ChatRequest):
-    try:
-        # Service manages its own shared page reference internally
-        ai_response_text = await execute_chat_transaction(payload.message)
-        return ChatResponse(response=ai_response_text)
-    except RuntimeError as service_error:
-        raise HTTPException(status_code=503, detail=str(service_error))
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error))
+async def run_terminal_demo():
+    print("[1/3] Initializing LangChain custom scaper model...")
+    # Headless=False opens a visible chrome instance so you can bypass logins/popups manually if needed
+    model = ScrapeChatModel(headless=False)
+    
+    messages = [HumanMessage(content="Write a 1-sentence motivational quote about coding.")]
+    
+    print("[2/3] Sending payload transaction via Playwright...")
+    response = await model.ainvoke(messages)
+    
+    print("\n" + "="*40)
+    print("LANGCHAIN OUTPUT RESULT:")
+    print("="*40)
+    print(response.content)
+    print("="*40 + "\n")
+    
+    print("[3/3] Shutting down browser threads cleanly...")
+    await model.aclose()
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000)
+    # Standard terminal run mechanism
+    asyncio.run(run_terminal_demo())
